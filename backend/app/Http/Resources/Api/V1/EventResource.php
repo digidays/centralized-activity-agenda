@@ -17,6 +17,12 @@ class EventResource extends JsonResource
         $appName = $this->app_name ?? $this->whenLoaded('club', fn () => $this->club->name);
         $appSource = $this->app_source ?? $this->whenLoaded('club', fn () => $this->club->source);
         $appType = $this->app_type ?? $this->whenLoaded('club', fn () => $this->club->type);
+        $tags = $this->tags;
+
+        if (is_string($tags)) {
+            $decoded = json_decode($tags, true);
+            $tags = is_array($decoded) ? $decoded : [];
+        }
 
         return [
             'id' => $this->id,
@@ -34,7 +40,7 @@ class EventResource extends JsonResource
             'is_cancelled' => $this->is_cancelled,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
-            'tags' => $this->tags ?? null,
+            'tags' => $tags ?? null,
         ];
     }
 }

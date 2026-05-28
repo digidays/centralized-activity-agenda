@@ -1,17 +1,26 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement('ALTER TABLE events ADD COLUMN IF NOT EXISTS is_cancelled BOOLEAN NOT NULL DEFAULT FALSE');
+        if (! Schema::hasColumn('events', 'is_cancelled')) {
+            Schema::table('events', function (Blueprint $table) {
+                $table->boolean('is_cancelled')->default(false)->after('img');
+            });
+        }
     }
 
     public function down(): void
     {
-        DB::statement('ALTER TABLE events DROP COLUMN IF EXISTS is_cancelled');
+        if (Schema::hasColumn('events', 'is_cancelled')) {
+            Schema::table('events', function (Blueprint $table) {
+                $table->dropColumn('is_cancelled');
+            });
+        }
     }
 };

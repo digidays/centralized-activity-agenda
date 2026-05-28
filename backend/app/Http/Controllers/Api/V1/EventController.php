@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StoreEventRequest;
 use App\Http\Requests\Api\V1\UpdateEventRequest;
 use App\Http\Resources\Api\V1\EventResource;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
@@ -20,7 +19,7 @@ class EventController extends Controller
     public function testEndpoint()
     {
         try {
-            $result = DB::selectOne('SELECT current_database() AS database, current_user AS username');
+            $result = DB::selectOne('SELECT DATABASE() AS database, CURRENT_USER() AS username');
 
             return response(
                 "[200] Laravel backend is up. Connected to {$result->database} as {$result->username}.",
@@ -208,27 +207,23 @@ class EventController extends Controller
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        try {
-            $result = DB::selectOne(
-                'SELECT sp_create_event(?, ?, ?, ?, ?, ?, ?, ?) AS event_id',
-                [
-                    $ownedClubId,
-                    $data['title'],
-                    $data['organizer'],
-                    $data['description'],
-                    $data['url'],
-                    $this->toDatabaseDate($data['start_date'] ?? null),
-                    $data['location'] ?? null,
-                    $data['img'] ?? null,
-                ]
-            );
-        } catch (QueryException $exception) {
-            return $this->storedProcedureErrorResponse($exception);
-        }
+        $eventId = (string) Str::uuid();
+        $inserted = DB::table('events')->insert([
+            'id' => $eventId,
+            'name' => $data['title'],
+            'organizer' => $data['organizer'],
+            'description' => $data['description'],
+            'url' => $data['url'],
+            'start_date' => $this->toDatabaseDate($data['start_date'] ?? null),
+            'location' => $data['location'] ?? null,
+            'img' => $data['img'] ?? null,
+            'app_id' => $ownedClubId,
+            'is_cancelled' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
-        $eventId = isset($result->event_id) ? (string) $result->event_id : null;
-
-        if (! $eventId) {
+        if (! $inserted) {
             return response()->json([
                 'message' => 'Event could not be created.',
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
@@ -293,26 +288,21 @@ class EventController extends Controller
 
         $data = $request->validated();
 
-        try {
-            $result = DB::selectOne(
-                'SELECT sp_update_event(?, ?, ?, ?, ?, ?, ?, ?, ?) AS updated',
-                [
-                    $id,
-                    $data['title'],
-                    $data['organizer'],
-                    $this->toDatabaseDate($data['start_date'] ?? null),
-                    $data['description'],
-                    $data['location'] ?? null,
-                    $data['url'],
-                    $data['img'] ?? null,
-                    $event->app_id,
-                ]
-            );
-        } catch (QueryException $exception) {
-            return $this->storedProcedureErrorResponse($exception);
-        }
+        $updated = DB::table('events')
+            ->where('id', $id)
+            ->update([
+                'name' => $data['title'],
+                'organizer' => $data['organizer'],
+                'start_date' => $this->toDatabaseDate($data['start_date'] ?? null),
+                'description' => $data['description'],
+                'location' => $data['location'] ?? null,
+                'url' => $data['url'],
+                'img' => $data['img'] ?? null,
+                'app_id' => $event->app_id,
+                'updated_at' => now(),
+            ]);
 
-        if (! $this->postgresBool($result->updated ?? false)) {
+        if ($updated === 0) {
             return response()->json([
                 'message' => "Event with ID {$id} not found.",
             ], Response::HTTP_NOT_FOUND);
@@ -350,13 +340,14 @@ class EventController extends Controller
             ], Response::HTTP_FORBIDDEN);
         }
 
-        try {
-            $result = DB::selectOne('SELECT sp_cancel_event(?, ?) AS cancelled', [$id, true]);
-        } catch (QueryException $exception) {
-            return $this->storedProcedureErrorResponse($exception);
-        }
+        $updated = DB::table('events')
+            ->where('id', $id)
+            ->update([
+                'is_cancelled' => true,
+                'updated_at' => now(),
+            ]);
 
-        if (! $this->postgresBool($result->cancelled ?? false)) {
+        if ($updated === 0) {
             return response()->json([
                 'message' => "Event with ID {$id} not found.",
             ], Response::HTTP_NOT_FOUND);
@@ -439,30 +430,47 @@ class EventController extends Controller
             ], Response::HTTP_BAD_REQUEST);
         }
 
-        try {
-            $result = DB::selectOne(
-                'SELECT sp_update_event(?, ?, ?, ?, ?, ?, ?, ?, ?) AS updated',
-                [
-                    $id,
-                    $updates['title'] ?? null,
-                    $updates['organizer'] ?? null,
-                    $this->toDatabaseDate($updates['start_date'] ?? null),
-                    $updates['description'] ?? null,
-                    $updates['location'] ?? null,
-                    $updates['url'] ?? null,
-                    $updates['img'] ?? null,
-                    $updates['app_id'] ?? null,
-                ]
-            );
+        $updatePayload = [];
 
-            if (array_key_exists('start_date', $updates) && $updates['start_date'] === null) {
-                DB::table('events')->where('id', $id)->update(['start_date' => null, 'updated_at' => now()]);
-            }
-        } catch (QueryException $exception) {
-            return $this->storedProcedureErrorResponse($exception);
+        if (array_key_exists('title', $updates)) {
+            $updatePayload['name'] = $updates['title'];
         }
 
-        if (! $this->postgresBool($result->updated ?? false)) {
+        if (array_key_exists('organizer', $updates)) {
+            $updatePayload['organizer'] = $updates['organizer'];
+        }
+
+        if (array_key_exists('start_date', $updates)) {
+            $updatePayload['start_date'] = $this->toDatabaseDate($updates['start_date']);
+        }
+
+        if (array_key_exists('description', $updates)) {
+            $updatePayload['description'] = $updates['description'];
+        }
+
+        if (array_key_exists('location', $updates)) {
+            $updatePayload['location'] = $updates['location'];
+        }
+
+        if (array_key_exists('url', $updates)) {
+            $updatePayload['url'] = $updates['url'];
+        }
+
+        if (array_key_exists('img', $updates)) {
+            $updatePayload['img'] = $updates['img'];
+        }
+
+        if (array_key_exists('app_id', $updates)) {
+            $updatePayload['app_id'] = $updates['app_id'];
+        }
+
+        $updatePayload['updated_at'] = now();
+
+        $updated = DB::table('events')
+            ->where('id', $id)
+            ->update($updatePayload);
+
+        if ($updated === 0) {
             return response()->json([
                 'message' => "Event with ID {$id} not found.",
             ], Response::HTTP_NOT_FOUND);
@@ -501,13 +509,11 @@ class EventController extends Controller
             ], Response::HTTP_FORBIDDEN);
         }
 
-        try {
-            $result = DB::selectOne('SELECT sp_delete_event(?) AS deleted', [$id]);
-        } catch (QueryException $exception) {
-            return $this->storedProcedureErrorResponse($exception);
-        }
+        DB::table('ext_int_ids')->where('event_id', $id)->delete();
+        DB::table('event_tag')->where('event_id', $id)->delete();
+        $deleted = DB::table('events')->where('id', $id)->delete();
 
-        if (! $this->postgresBool($result->deleted ?? false)) {
+        if ($deleted === 0) {
             return response()->json([
                 'message' => "Event with ID {$id} not found.",
             ], Response::HTTP_NOT_FOUND);
@@ -584,12 +590,4 @@ class EventController extends Controller
         }
     }
 
-    private function postgresBool(mixed $value): bool
-    {
-        if (is_bool($value)) {
-            return $value;
-        }
-
-        return in_array((string) $value, ['t', 'true', '1'], true);
-    }
 }

@@ -2,7 +2,6 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
 
 return new class extends Migration
 {
@@ -11,14 +10,14 @@ return new class extends Migration
         $unownedCount = DB::table('clubs')->whereNull('owner_user_id')->count();
 
         if ($unownedCount > 0) {
-            throw new RuntimeException("Cannot enforce NOT NULL on clubs.owner_user_id, {$unownedCount} clubs are still unowned.");
+            throw new \RuntimeException("Cannot enforce NOT NULL on clubs.owner_user_id, {$unownedCount} clubs are still unowned.");
         }
 
-        DB::statement('ALTER TABLE clubs ALTER COLUMN owner_user_id SET NOT NULL');
+        DB::statement('ALTER TABLE clubs MODIFY owner_user_id BIGINT UNSIGNED NOT NULL');
     }
 
     public function down(): void
     {
-        DB::statement('ALTER TABLE clubs ALTER COLUMN owner_user_id DROP NOT NULL');
+        DB::statement('ALTER TABLE clubs MODIFY owner_user_id BIGINT UNSIGNED NULL');
     }
 };
