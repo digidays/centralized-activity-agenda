@@ -3,7 +3,6 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use RuntimeException;
 
 return new class extends Migration
 {
@@ -12,7 +11,7 @@ return new class extends Migration
         $viewsPath = base_path('database_sql/views.sql');
 
         if (! File::exists($viewsPath)) {
-            throw new RuntimeException("SQL file not found: {$viewsPath}");
+            throw new \RuntimeException("SQL file not found: {$viewsPath}");
         }
 
         DB::unprepared(File::get($viewsPath));
