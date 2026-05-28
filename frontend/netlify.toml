@@ -1,0 +1,9 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Vue Router history mode: serve index.html for client routes.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -263,6 +263,35 @@ Common issues:
 - PHP dependencies not installed: `docker compose exec backend composer install`
 - Database connection failing: ensure database service is healthy
 
+### Frontend: `Failed to resolve module specifier "vue"`
+
+Production must serve the Vite build output, not the dev `index.html` that loads `/src/main.js`.
+
+**Netlify** (recommended for this frontend):
+
+| Setting | Value |
+| --- | --- |
+| Base directory | `frontend` |
+| Build command | `npm run build` (or leave empty; `frontend/netlify.toml` sets it) |
+| Publish directory | `dist` |
+
+In Netlify → **Site configuration → Environment variables**, add:
+
+`VITE_API_BASE` = `https://your-api.example.com/api/v1`
+
+Redeploy after changing env vars (Vite inlines them at build time).
+
+**Docker** (alternative):
+
+```bash
+docker build -f frontend/Dockerfile \
+  --build-arg VITE_API_BASE=https://your-api.example.com/api/v1 \
+  -t caa-frontend ./frontend
+docker run -p 8080:80 caa-frontend
+```
+
+Local development still uses `Dockerfile.dev` via `docker compose`.
+
 ### Frontend Connection Issues
 
 If frontend can't connect to backend:
