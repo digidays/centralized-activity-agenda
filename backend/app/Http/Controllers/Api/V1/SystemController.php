@@ -35,7 +35,7 @@ class SystemController extends Controller
         try {
             $dbName = config('database.default') === 'sqlite'
                 ? 'SQLite Sandbox'
-                : DB::selectOne('SELECT current_database() AS db')->db;
+                : DB::selectOne('SELECT DATABASE() AS db')->db;
 
             return response()->json([
                 'status' => 'online',

@@ -3,16 +3,19 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
-use RuntimeException;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        $proceduresPath = base_path('database_sql/sp.sql');
+        if (DB::getDriverName() === 'mysql') {
+            return;
+        }
+
+        $proceduresPath = base_path('../database/sql/sp.sql');
 
         if (! File::exists($proceduresPath)) {
-            throw new RuntimeException("SQL file not found: {$proceduresPath}");
+            throw new \RuntimeException("SQL file not found: {$proceduresPath}");
         }
 
         DB::unprepared(File::get($proceduresPath));
@@ -20,6 +23,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (DB::getDriverName() === 'mysql') {
+            return;
+        }
+
         DB::unprepared(<<<'SQL'
             DROP FUNCTION IF EXISTS sp_untag_event(UUID, BIGINT);
             DROP FUNCTION IF EXISTS sp_tag_event(UUID, BIGINT);

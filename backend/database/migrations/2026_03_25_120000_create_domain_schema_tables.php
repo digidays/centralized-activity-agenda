@@ -1,106 +1,85 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        DB::unprepared(<<<'SQL'
-            DO $$
-            BEGIN
-                CREATE TYPE club_type_enum AS ENUM ('remote', 'local', 'scraped');
-            EXCEPTION
-                WHEN duplicate_object THEN null;
-            END
-            $$;
+        Schema::create('clubs', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('name');
+            $table->text('source');
+            $table->text('issued_key')->nullable();
+            $table->text('received_key')->nullable();
+            $table->enum('type', ['remote', 'local', 'scraped']);
+            $table->unsignedBigInteger('owner_user_id')->nullable();
+            $table->index('owner_user_id');
+            $table->foreign('owner_user_id')->references('id')->on('users');
+        });
 
-            CREATE TABLE IF NOT EXISTS clubs (
-                id UUID PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                source TEXT NOT NULL,
-                issued_key TEXT,
-                received_key TEXT,
-                type club_type_enum NOT NULL,
-                owner_user_id BIGINT NOT NULL,
-                CONSTRAINT clubs_owner_user_id_foreign
-                    FOREIGN KEY (owner_user_id) REFERENCES users(id)
-            );
+        Schema::create('events', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->text('name');
+            $table->text('organizer');
+            $table->date('start_date')->nullable();
+            $table->text('description');
+            $table->text('location')->nullable();
+            $table->text('url');
+            $table->uuid('app_id');
+            $table->text('img')->nullable();
+            $table->boolean('is_cancelled')->default(false);
+            $table->timestamps();
+            $table->foreign('app_id')->references('id')->on('clubs');
+            $table->index('app_id');
+        });
 
-            CREATE TABLE IF NOT EXISTS events (
-                id UUID PRIMARY KEY,
-                name TEXT NOT NULL,
-                organizer TEXT NOT NULL,
-                start_date DATE NULL,
-                description TEXT NOT NULL,
-                location TEXT NULL,
-                url TEXT NOT NULL,
-                app_id UUID NOT NULL,
-                img TEXT NULL,
-                is_cancelled BOOLEAN NOT NULL DEFAULT FALSE,
-                created_at TIMESTAMP(0) WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMP(0) WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                CONSTRAINT events_app_id_foreign
-                    FOREIGN KEY (app_id) REFERENCES clubs(id)
-            );
+        Schema::create('ext_int_ids', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('event_id');
+            $table->uuid('app_id');
+            $table->text('external_id');
+            $table->timestamp('created_at')->useCurrent();
+            $table->foreign('event_id')->references('id')->on('events');
+            $table->foreign('app_id')->references('id')->on('clubs');
+            $table->index('event_id');
+            $table->index('app_id');
+        });
 
-            CREATE TABLE IF NOT EXISTS ext_int_ids (
-                id UUID PRIMARY KEY,
-                event_id UUID NOT NULL,
-                app_id UUID NOT NULL,
-                external_id TEXT NOT NULL,
-                created_at TIMESTAMP(0) WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                CONSTRAINT ext_int_ids_event_id_foreign
-                    FOREIGN KEY (event_id) REFERENCES events(id),
-                CONSTRAINT ext_int_ids_app_id_foreign
-                    FOREIGN KEY (app_id) REFERENCES clubs(id)
-            );
+        Schema::create('staging', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->json('raw_data');
+            $table->uuid('app_id');
+            $table->timestamp('created_at')->useCurrent();
+            $table->foreign('app_id')->references('id')->on('clubs');
+            $table->index('app_id');
+        });
 
-            CREATE TABLE IF NOT EXISTS staging (
-                id UUID PRIMARY KEY,
-                raw_data JSONB NOT NULL,
-                app_id UUID NOT NULL,
-                created_at TIMESTAMP(0) WITH TIME ZONE NOT NULL DEFAULT NOW(),
-                CONSTRAINT staging_app_id_foreign
-                    FOREIGN KEY (app_id) REFERENCES clubs(id)
-            );
+        Schema::create('tags', function (Blueprint $table) {
+            $table->unsignedBigInteger('id')->primary();
+            $table->text('slug');
+        });
 
-            CREATE TABLE IF NOT EXISTS tags (
-                id BIGINT PRIMARY KEY,
-                slug TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS event_tag (
-                id BIGINT PRIMARY KEY,
-                event_id UUID NOT NULL,
-                tag_id BIGINT NOT NULL,
-                CONSTRAINT event_tag_event_id_foreign
-                    FOREIGN KEY (event_id) REFERENCES events(id),
-                CONSTRAINT event_tag_tag_id_foreign
-                    FOREIGN KEY (tag_id) REFERENCES tags(id)
-            );
-
-            CREATE INDEX IF NOT EXISTS events_app_id_idx ON events(app_id);
-            CREATE INDEX IF NOT EXISTS clubs_owner_user_id_idx ON clubs(owner_user_id);
-            CREATE INDEX IF NOT EXISTS ext_int_ids_event_id_idx ON ext_int_ids(event_id);
-            CREATE INDEX IF NOT EXISTS ext_int_ids_app_id_idx ON ext_int_ids(app_id);
-            CREATE INDEX IF NOT EXISTS staging_app_id_idx ON staging(app_id);
-            CREATE INDEX IF NOT EXISTS event_tag_event_id_idx ON event_tag(event_id);
-            CREATE INDEX IF NOT EXISTS event_tag_tag_id_idx ON event_tag(tag_id);
-        SQL);
+        Schema::create('event_tag', function (Blueprint $table) {
+            $table->unsignedBigInteger('id')->primary();
+            $table->uuid('event_id');
+            $table->unsignedBigInteger('tag_id');
+            $table->foreign('event_id')->references('id')->on('events');
+            $table->foreign('tag_id')->references('id')->on('tags');
+            $table->index('event_id');
+            $table->index('tag_id');
+        });
     }
 
     public function down(): void
     {
-        DB::unprepared(<<<'SQL'
-            DROP TABLE IF EXISTS event_tag;
-            DROP TABLE IF EXISTS ext_int_ids;
-            DROP TABLE IF EXISTS staging;
-            DROP TABLE IF EXISTS events;
-            DROP TABLE IF EXISTS tags;
-            DROP TABLE IF EXISTS clubs;
-            DROP TYPE IF EXISTS club_type_enum;
-        SQL);
+        Schema::dropIfExists('event_tag');
+        Schema::dropIfExists('ext_int_ids');
+        Schema::dropIfExists('staging');
+        Schema::dropIfExists('events');
+        Schema::dropIfExists('tags');
+        Schema::dropIfExists('clubs');
     }
 };
